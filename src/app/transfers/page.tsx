@@ -58,19 +58,30 @@ export default async function TransfersPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">My Transfers</h1>
+            <h1 className="text-3xl font-bold">
+              My Transfers
+            </h1>
 
             <p className="mt-2 text-gray-600">
               View the transfers you have submitted.
             </p>
           </div>
 
-          <Link
-            href="/transfers/new"
-            className="rounded bg-black px-4 py-2 text-white"
-          >
-            New Transfer
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50"
+            >
+              ← Dashboard
+            </Link>
+
+            <Link
+              href="/transfers/new"
+              className="rounded bg-black px-4 py-2 text-white hover:bg-gray-800"
+            >
+              New Transfer
+            </Link>
+          </div>
         </div>
 
         {!transfers || transfers.length === 0 ? (
