@@ -11,6 +11,12 @@ type Agent = {
   full_name: string;
 };
 
+type BusinessDay = {
+  id: string;
+  business_date: string;
+  status: string;
+};
+
 const DESTINATION_COUNTRIES = [
   { country: "DR Congo", currency: "CDF", flag: "🇨🇩" },
   { country: "Rwanda", currency: "RWF", flag: "🇷🇼" },
@@ -19,6 +25,18 @@ const DESTINATION_COUNTRIES = [
   { country: "Burundi", currency: "BIF", flag: "🇧🇮" },
   { country: "Ethiopia", currency: "ETB", flag: "🇪🇹" },
 ] as const;
+
+function formatBusinessDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(
+    undefined,
+    {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }
+  );
+}
 
 export default function NewTransferPage() {
   const router = useRouter();
@@ -34,12 +52,16 @@ export default function NewTransferPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
 
-  const [exchangeRate, setExchangeRate] = useState<number | null>(
-    null
-  );
-  const [rateId, setRateId] = useState<string | null>(null);
+  const [businessDay, setBusinessDay] =
+    useState<BusinessDay | null>(null);
 
-  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [exchangeRate, setExchangeRate] =
+    useState<number | null>(null);
+
+  const [rateId, setRateId] =
+    useState<string | null>(null);
+
+  const [loadingPage, setLoadingPage] = useState(true);
   const [loadingRate, setLoadingRate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,38 +83,93 @@ export default function NewTransferPage() {
       ? Number(amount) * exchangeRate
       : 0;
 
+  /*
+   * Load the Business Day and available agents when
+   * the page opens.
+   */
   useEffect(() => {
-    async function loadAgents() {
-      setLoadingAgents(true);
+    async function loadInitialData() {
+      setLoadingPage(true);
       setError("");
 
       const supabase = createClient();
 
-      const { data, error: rpcError } = await supabase.rpc(
-        "get_available_agents"
-      );
+      const [businessDayResult, agentsResult] =
+        await Promise.all([
+          supabase.rpc("get_current_business_day"),
+          supabase.rpc("get_available_agents"),
+        ]);
 
-      if (rpcError) {
-        console.error(rpcError);
-        setError(rpcError.message);
-        setLoadingAgents(false);
+      if (businessDayResult.error) {
+        console.error(
+          "Business Day error:",
+          businessDayResult.error
+        );
+
+        setBusinessDay(null);
+        setError(businessDayResult.error.message);
+        setLoadingPage(false);
         return;
       }
 
-      setAgents(data ?? []);
+      const currentBusinessDay =
+        Array.isArray(businessDayResult.data) &&
+        businessDayResult.data.length > 0
+          ? businessDayResult.data[0]
+          : null;
 
-      if (data && data.length > 0) {
-        setAgentId(data[0].id);
+      setBusinessDay(currentBusinessDay);
+
+      if (!currentBusinessDay) {
+        setAgents([]);
+        setAgentId("");
+        setLoadingPage(false);
+
+        setError(
+          "Transfers are currently unavailable because no Business Day is open."
+        );
+
+        return;
       }
 
-      setLoadingAgents(false);
+      if (agentsResult.error) {
+        console.error(
+          "Available agents error:",
+          agentsResult.error
+        );
+
+        setError(agentsResult.error.message);
+        setLoadingPage(false);
+        return;
+      }
+
+      const availableAgents = agentsResult.data ?? [];
+
+      setAgents(availableAgents);
+
+      if (availableAgents.length > 0) {
+        setAgentId(availableAgents[0].id);
+      }
+
+      setLoadingPage(false);
     }
 
-    loadAgents();
+    loadInitialData();
   }, []);
 
+  /*
+   * Load the exchange rate for the CURRENT BUSINESS DAY.
+   *
+   * We intentionally do not use the browser date or UTC date.
+   */
   useEffect(() => {
     async function loadRate() {
+      if (!businessDay) {
+        setExchangeRate(null);
+        setRateId(null);
+        return;
+      }
+
       if (!sourceCurrency || !destinationCurrency) {
         return;
       }
@@ -108,21 +185,21 @@ export default function NewTransferPage() {
 
       const supabase = createClient();
 
-      const today = new Date()
-        .toISOString()
-        .split("T")[0];
-
       const { data, error: rpcError } = await supabase.rpc(
         "get_daily_rate",
         {
-          p_rate_date: today,
+          p_rate_date: businessDay.business_date,
           p_currency_from: sourceCurrency,
           p_currency_to: destinationCurrency,
         }
       );
 
       if (rpcError) {
-        console.error(rpcError);
+        console.error(
+          "Daily rate error:",
+          rpcError
+        );
+
         setExchangeRate(null);
         setRateId(null);
         setError(rpcError.message);
@@ -135,9 +212,13 @@ export default function NewTransferPage() {
       if (!rate) {
         setExchangeRate(null);
         setRateId(null);
+
         setError(
-          `No exchange rate is available today for ${sourceCurrency} → ${destinationCurrency}.`
+          `No exchange rate is available for ${sourceCurrency} → ${destinationCurrency} on ${formatBusinessDate(
+            businessDay.business_date
+          )}.`
         );
+
         setLoadingRate(false);
         return;
       }
@@ -149,7 +230,11 @@ export default function NewTransferPage() {
     }
 
     loadRate();
-  }, [sourceCurrency, destinationCurrency]);
+  }, [
+    businessDay,
+    sourceCurrency,
+    destinationCurrency,
+  ]);
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -179,20 +264,64 @@ export default function NewTransferPage() {
       return;
     }
 
+    /*
+     * Re-check the Business Day immediately before creating
+     * the transfer. This prevents a stale page from creating
+     * a transfer after Management has closed the day.
+     */
     const supabase = createClient();
 
-    const today = new Date()
-      .toISOString()
-      .split("T")[0];
+    const { data: currentBusinessDays, error: businessDayError } =
+      await supabase.rpc("get_current_business_day");
 
+    if (businessDayError) {
+      console.error(
+        "Business Day check failed:",
+        businessDayError
+      );
+
+      setError(businessDayError.message);
+      setSubmitting(false);
+      return;
+    }
+
+    const currentBusinessDay =
+      Array.isArray(currentBusinessDays) &&
+      currentBusinessDays.length > 0
+        ? currentBusinessDays[0]
+        : null;
+
+    if (!currentBusinessDay) {
+      setBusinessDay(null);
+      setExchangeRate(null);
+      setRateId(null);
+
+      setError(
+        "The Business Day is now closed. Transfers cannot be created until a new Business Day is opened."
+      );
+
+      setSubmitting(false);
+      return;
+    }
+
+    /*
+     * Get the rate again immediately before insertion.
+     * This ensures the transfer uses the current approved
+     * Business Day rate rather than a stale rate from the UI.
+     */
     const { data: latestRate, error: rateError } =
       await supabase.rpc("get_daily_rate", {
-        p_rate_date: today,
+        p_rate_date: currentBusinessDay.business_date,
         p_currency_from: sourceCurrency,
         p_currency_to: destinationCurrency,
       });
 
     if (rateError) {
+      console.error(
+        "Daily rate error:",
+        rateError
+      );
+
       setError(rateError.message);
       setSubmitting(false);
       return;
@@ -202,23 +331,38 @@ export default function NewTransferPage() {
 
     if (!rate) {
       setError(
-        `No exchange rate is available today for ${sourceCurrency} → ${destinationCurrency}.`
+        `No exchange rate is available for ${sourceCurrency} → ${destinationCurrency} on ${formatBusinessDate(
+          currentBusinessDay.business_date
+        )}.`
       );
+
       setSubmitting(false);
       return;
     }
 
     const currentRate = Number(rate.sell_rate);
+
     const calculatedDestinationAmount =
       numericAmount * currentRate;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError(
+        "Your session has expired. Please log in again."
+      );
+
+      setSubmitting(false);
+      return;
+    }
 
     const { data: transfer, error: insertError } =
       await supabase
         .from("transfer_requests")
         .insert({
-          client_id: (
-            await supabase.auth.getUser()
-          ).data.user?.id,
+          client_id: user.id,
           agent_id: agentId,
           amount: numericAmount,
           source_amount: numericAmount,
@@ -227,21 +371,31 @@ export default function NewTransferPage() {
           destination_currency: destinationCurrency,
           rate_id: rate.id,
           exchange_rate: currentRate,
-          destination_amount: calculatedDestinationAmount,
+          destination_amount:
+            calculatedDestinationAmount,
           recipient_name: recipientName.trim(),
-          recipient_phone: recipientPhone.trim() || null,
+          recipient_phone:
+            recipientPhone.trim() || null,
           status: "requested",
         })
         .select("id")
         .single();
 
     if (insertError) {
-      console.error(insertError);
+      console.error(
+        "Transfer creation error:",
+        insertError
+      );
+
       setError(insertError.message);
       setSubmitting(false);
       return;
     }
 
+    /*
+     * The database trigger automatically attaches the new
+     * transfer to the currently open Business Day.
+     */
     router.push(`/transfers/${transfer.id}`);
   }
 
@@ -265,11 +419,53 @@ export default function NewTransferPage() {
           </p>
         </div>
 
+        {/* Business Day Status */}
+        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Current Business Day
+              </p>
+
+              {loadingPage ? (
+                <p className="mt-1 font-semibold text-gray-900">
+                  Checking...
+                </p>
+              ) : businessDay ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+
+                  <p className="font-semibold text-gray-900">
+                    {formatBusinessDate(
+                      businessDay.business_date
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-gray-400" />
+
+                  <p className="font-semibold text-gray-900">
+                    Closed
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {businessDay && (
+              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                Operational
+              </span>
+            )}
+          </div>
+        </div>
+
         <form
           onSubmit={handleSubmit}
           className="rounded-lg border border-gray-200 bg-white p-6"
         >
           <div className="space-y-6">
+            {/* Source Currency */}
             <div>
               <label className="block text-sm font-medium">
                 Source Currency
@@ -280,7 +476,12 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setSourceCurrency(event.target.value)
                 }
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                disabled={
+                  loadingPage ||
+                  !businessDay ||
+                  submitting
+                }
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               >
                 {CURRENCIES.map((currency) => (
                   <option
@@ -294,6 +495,7 @@ export default function NewTransferPage() {
               </select>
             </div>
 
+            {/* Destination Country */}
             <div>
               <label className="block text-sm font-medium">
                 Destination Country
@@ -304,20 +506,29 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setDestinationCountry(event.target.value)
                 }
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                disabled={
+                  loadingPage ||
+                  !businessDay ||
+                  submitting
+                }
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               >
-                {DESTINATION_COUNTRIES.map((destination) => (
-                  <option
-                    key={destination.country}
-                    value={destination.country}
-                  >
-                    {destination.flag} {destination.country} —{" "}
-                    {destination.currency}
-                  </option>
-                ))}
+                {DESTINATION_COUNTRIES.map(
+                  (destination) => (
+                    <option
+                      key={destination.country}
+                      value={destination.country}
+                    >
+                      {destination.flag}{" "}
+                      {destination.country} —{" "}
+                      {destination.currency}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
+            {/* Amount */}
             <div>
               <label className="block text-sm font-medium">
                 Amount
@@ -331,11 +542,17 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setAmount(event.target.value)
                 }
+                disabled={
+                  loadingPage ||
+                  !businessDay ||
+                  submitting
+                }
                 placeholder={`Amount in ${sourceCurrency}`}
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
             </div>
 
+            {/* Exchange Rate */}
             <div className="rounded-lg bg-gray-50 p-4">
               <p className="text-sm text-gray-500">
                 Exchange Rate
@@ -348,7 +565,8 @@ export default function NewTransferPage() {
               ) : exchangeRate ? (
                 <>
                   <p className="mt-1 text-lg font-semibold">
-                    1 {sourceCurrency} = {exchangeRate}{" "}
+                    1 {sourceCurrency} ={" "}
+                    {exchangeRate}{" "}
                     {destinationCurrency}
                   </p>
 
@@ -364,6 +582,15 @@ export default function NewTransferPage() {
                       {destinationCurrency}
                     </span>
                   </p>
+
+                  {businessDay && (
+                    <p className="mt-2 text-xs text-gray-400">
+                      Rate for{" "}
+                      {formatBusinessDate(
+                        businessDay.business_date
+                      )}
+                    </p>
+                  )}
                 </>
               ) : (
                 <p className="mt-1 text-sm text-red-600">
@@ -372,6 +599,7 @@ export default function NewTransferPage() {
               )}
             </div>
 
+            {/* Agent */}
             <div>
               <label className="block text-sm font-medium">
                 Agent
@@ -383,14 +611,21 @@ export default function NewTransferPage() {
                   setAgentId(event.target.value)
                 }
                 disabled={
-                  loadingAgents || agents.length === 0
+                  loadingPage ||
+                  !businessDay ||
+                  submitting ||
+                  agents.length === 0
                 }
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               >
-                {loadingAgents ? (
-                  <option>Loading agents...</option>
+                {loadingPage ? (
+                  <option>
+                    Loading agents...
+                  </option>
                 ) : agents.length === 0 ? (
-                  <option>No agents available</option>
+                  <option>
+                    No agents available
+                  </option>
                 ) : (
                   agents.map((agent) => (
                     <option
@@ -404,6 +639,7 @@ export default function NewTransferPage() {
               </select>
             </div>
 
+            {/* Recipient Name */}
             <div>
               <label className="block text-sm font-medium">
                 Recipient Name
@@ -415,10 +651,16 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setRecipientName(event.target.value)
                 }
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                disabled={
+                  loadingPage ||
+                  !businessDay ||
+                  submitting
+                }
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
             </div>
 
+            {/* Recipient Phone */}
             <div>
               <label className="block text-sm font-medium">
                 Recipient Phone
@@ -430,20 +672,45 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setRecipientPhone(event.target.value)
                 }
-                className="mt-2 w-full rounded border border-gray-300 px-3 py-2"
+                disabled={
+                  loadingPage ||
+                  !businessDay ||
+                  submitting
+                }
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
             </div>
 
+            {/* Error */}
             {error && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
-                {error}
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="text-sm text-red-700">
+                  {error}
+                </p>
+              </div>
+            )}
+
+            {/* Closed Business Day */}
+            {!loadingPage && !businessDay && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                <p className="font-medium text-yellow-900">
+                  Transfers are currently unavailable.
+                </p>
+
+                <p className="mt-1 text-sm text-yellow-800">
+                  There is no open Business Day. Please
+                  contact Management before creating a
+                  transfer.
+                </p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={
+                loadingPage ||
                 submitting ||
+                !businessDay ||
                 loadingRate ||
                 !exchangeRate ||
                 !agentId
