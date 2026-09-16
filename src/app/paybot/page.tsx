@@ -4,6 +4,16 @@ import { createClient } from "@/lib/supabase-server";
 import LogoutButton from "../dashboard/logout-button";
 import ClaimTransferButton from "./claim-transfer-button";
 
+type BusinessDay = {
+  id: string;
+  business_date: string;
+  status: "open" | "closing" | "closed" | string;
+  opened_at: string | null;
+  opened_by: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export default async function PaybotDashboardPage() {
   const supabase = await createClient();
 
@@ -15,11 +25,12 @@ export default async function PaybotDashboardPage() {
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("full_name, role")
-    .eq("id", user.id)
-    .single();
+  const { data: profile, error: profileError } =
+    await supabase
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", user.id)
+      .single();
 
   if (
     profileError ||
@@ -29,45 +40,38 @@ export default async function PaybotDashboardPage() {
     redirect("/dashboard");
   }
 
-  /*
-   * AVAILABLE TRANSFERS
-   *
-   * RLS limits these transfers to:
-   * - transfers sent to Paybot
-   * - no Paybot currently assigned
-   * - destination country assigned to this Paybot
-   */
-  const {
-    data: availableTransfers,
-    error: availableError,
-  } = await supabase
-    .from("transfer_requests")
-    .select(
-      "id, amount, currency, destination_country, recipient_name, status, created_at"
-    )
-    .eq("status", "sent_to_paybot")
-    .is("paybot_id", null)
-    .order("created_at", { ascending: true });
+  const [
+    { data: availableTransfers, error: availableError },
+    { data: activeTransfers, error: activeError },
+    { data: businessDays, error: businessDayError },
+  ] = await Promise.all([
+    supabase
+      .from("transfer_requests")
+      .select(
+        "id, amount, currency, destination_country, recipient_name, status, created_at"
+      )
+      .eq("status", "sent_to_paybot")
+      .is("paybot_id", null)
+      .order("created_at", {
+        ascending: true,
+      }),
 
-  /*
-   * ACTIVE TRANSFERS
-   *
-   * These are transfers already claimed by this Paybot.
-   */
-  const {
-    data: activeTransfers,
-    error: activeError,
-  } = await supabase
-    .from("transfer_requests")
-    .select(
-      "id, amount, currency, destination_country, recipient_name, status, created_at"
-    )
-    .eq("paybot_id", user.id)
-    .in("status", [
-      "paybot_accepted",
-      "paybot_pending",
-    ])
-    .order("created_at", { ascending: false });
+    supabase
+      .from("transfer_requests")
+      .select(
+        "id, amount, currency, destination_country, recipient_name, status, created_at"
+      )
+      .eq("paybot_id", user.id)
+      .in("status", [
+        "paybot_accepted",
+        "paybot_pending",
+      ])
+      .order("created_at", {
+        ascending: false,
+      }),
+
+    supabase.rpc("get_current_business_day"),
+  ]);
 
   if (availableError) {
     console.error(
@@ -82,6 +86,25 @@ export default async function PaybotDashboardPage() {
       activeError
     );
   }
+
+  if (businessDayError) {
+    console.error(
+      "Business Day error:",
+      businessDayError
+    );
+  }
+
+  const businessDay: BusinessDay | null =
+    Array.isArray(businessDays) &&
+    businessDays.length > 0
+      ? businessDays[0]
+      : null;
+
+  const isOpen =
+    businessDay?.status === "open";
+
+  const isClosing =
+    businessDay?.status === "closing";
 
   const availableCount =
     availableTransfers?.length ?? 0;
@@ -99,11 +122,8 @@ export default async function PaybotDashboardPage() {
     <main className="min-h-screen bg-gray-100 p-8">
       <div className="mx-auto max-w-6xl">
 
-        {/* ================================================== */}
-        {/* HEADER */}
-        {/* ================================================== */}
-
-        <div className="mb-8 flex items-center justify-between">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">
               Paybot Dashboard
@@ -126,10 +146,87 @@ export default async function PaybotDashboardPage() {
           </div>
         </div>
 
-        {/* ================================================== */}
-        {/* SUMMARY */}
-        {/* ================================================== */}
+        {/* Business Day Status */}
+        <div
+          className={`mb-8 rounded-lg border p-5 shadow-sm ${
+            isOpen
+              ? "border-green-200 bg-green-50"
+              : isClosing
+                ? "border-yellow-200 bg-yellow-50"
+                : "border-gray-200 bg-white"
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Business Day
+              </p>
 
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={`h-3 w-3 rounded-full ${
+                    isOpen
+                      ? "bg-green-500"
+                      : isClosing
+                        ? "bg-yellow-500"
+                        : "bg-gray-400"
+                  }`}
+                />
+
+                <span className="text-lg font-bold">
+                  {isOpen
+                    ? "OPEN"
+                    : isClosing
+                      ? "CLOSING"
+                      : "CLOSED"}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-sm sm:text-right">
+              {businessDay ? (
+                <>
+                  <p className="font-medium text-gray-700">
+                    {new Date(
+                      `${businessDay.business_date}T00:00:00`
+                    ).toLocaleDateString()}
+                  </p>
+
+                  <p
+                    className={
+                      isOpen
+                        ? "text-green-700"
+                        : isClosing
+                          ? "text-yellow-700"
+                          : "text-gray-500"
+                    }
+                  >
+                    {isOpen
+                      ? "Normal operations"
+                      : isClosing
+                        ? "New Paybot cash sessions are closed. Existing operations may continue."
+                        : "No active Business Day"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-500">
+                  No active Business Day
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isClosing && (
+            <div className="mt-4 rounded-md border border-yellow-200 bg-yellow-100 p-3 text-sm text-yellow-900">
+              <strong>Closing:</strong>{" "}
+              You can continue processing transfers and
+              completing existing cash sessions. New
+              Paybot cash sessions cannot be opened.
+            </div>
+          )}
+        </div>
+
+        {/* Summary */}
         <div className="grid gap-6 md:grid-cols-3">
 
           <div className="rounded-lg bg-white p-6 shadow">
@@ -176,10 +273,7 @@ export default async function PaybotDashboardPage() {
 
         </div>
 
-        {/* ================================================== */}
-        {/* AVAILABLE TRANSFERS */}
-        {/* ================================================== */}
-
+        {/* Available Transfers */}
         <div className="mt-8 rounded-lg bg-white shadow">
 
           <div className="border-b p-6">
@@ -277,10 +371,7 @@ export default async function PaybotDashboardPage() {
 
         </div>
 
-        {/* ================================================== */}
-        {/* MY ACTIVE TRANSFERS */}
-        {/* ================================================== */}
-
+        {/* My Active Transfers */}
         <div className="mt-8 rounded-lg bg-white shadow">
 
           <div className="border-b p-6">

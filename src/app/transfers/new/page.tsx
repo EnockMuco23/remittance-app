@@ -14,7 +14,7 @@ type Agent = {
 type BusinessDay = {
   id: string;
   business_date: string;
-  status: string;
+  status: "open" | "closing" | "closed" | string;
 };
 
 const DESTINATION_COUNTRIES = [
@@ -27,15 +27,12 @@ const DESTINATION_COUNTRIES = [
 ] as const;
 
 function formatBusinessDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString(
-    undefined,
-    {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }
-  );
+  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 export default function NewTransferPage() {
@@ -83,6 +80,12 @@ export default function NewTransferPage() {
       ? Number(amount) * exchangeRate
       : 0;
 
+  const isBusinessDayOpen =
+    businessDay?.status === "open";
+
+  const isBusinessDayClosing =
+    businessDay?.status === "closing";
+
   /*
    * Load the Business Day and available agents when
    * the page opens.
@@ -126,8 +129,31 @@ export default function NewTransferPage() {
         setLoadingPage(false);
 
         setError(
-          "Transfers are currently unavailable because no Business Day is open."
+          "Transfers are currently unavailable because no Business Day is active."
         );
+
+        return;
+      }
+
+      /*
+       * A CLOSING Business Day is still returned by
+       * get_current_business_day(), but new transfers
+       * are no longer allowed.
+       */
+      if (currentBusinessDay.status !== "open") {
+        setAgents([]);
+        setAgentId("");
+        setLoadingPage(false);
+
+        if (currentBusinessDay.status === "closing") {
+          setError(
+            "Transfers are closed for the day. The current Business Day is closing and no new transfers can be created."
+          );
+        } else {
+          setError(
+            "Transfers are currently unavailable because the Business Day is not open."
+          );
+        }
 
         return;
       }
@@ -158,13 +184,13 @@ export default function NewTransferPage() {
   }, []);
 
   /*
-   * Load the exchange rate for the CURRENT BUSINESS DAY.
+   * Load the exchange rate for the CURRENT OPEN BUSINESS DAY.
    *
-   * We intentionally do not use the browser date or UTC date.
+   * We intentionally do not load rates during CLOSING.
    */
   useEffect(() => {
     async function loadRate() {
-      if (!businessDay) {
+      if (!businessDay || businessDay.status !== "open") {
         setExchangeRate(null);
         setRateId(null);
         return;
@@ -266,13 +292,14 @@ export default function NewTransferPage() {
 
     /*
      * Re-check the Business Day immediately before creating
-     * the transfer. This prevents a stale page from creating
-     * a transfer after Management has closed the day.
+     * the transfer.
      */
     const supabase = createClient();
 
-    const { data: currentBusinessDays, error: businessDayError } =
-      await supabase.rpc("get_current_business_day");
+    const {
+      data: currentBusinessDays,
+      error: businessDayError,
+    } = await supabase.rpc("get_current_business_day");
 
     if (businessDayError) {
       console.error(
@@ -297,8 +324,32 @@ export default function NewTransferPage() {
       setRateId(null);
 
       setError(
-        "The Business Day is now closed. Transfers cannot be created until a new Business Day is opened."
+        "There is no active Business Day. Transfers cannot be created until a new Business Day is opened."
       );
+
+      setSubmitting(false);
+      return;
+    }
+
+    /*
+     * IMPORTANT:
+     * get_current_business_day() also returns CLOSING.
+     * A transfer is only allowed while the status is OPEN.
+     */
+    if (currentBusinessDay.status !== "open") {
+      setBusinessDay(currentBusinessDay);
+      setExchangeRate(null);
+      setRateId(null);
+
+      if (currentBusinessDay.status === "closing") {
+        setError(
+          "Transfers are closed for the day. The current Business Day is closing and no new transfers can be created."
+        );
+      } else {
+        setError(
+          "The current Business Day is not open. Transfers cannot be created."
+        );
+      }
 
       setSubmitting(false);
       return;
@@ -309,12 +360,14 @@ export default function NewTransferPage() {
      * This ensures the transfer uses the current approved
      * Business Day rate rather than a stale rate from the UI.
      */
-    const { data: latestRate, error: rateError } =
-      await supabase.rpc("get_daily_rate", {
-        p_rate_date: currentBusinessDay.business_date,
-        p_currency_from: sourceCurrency,
-        p_currency_to: destinationCurrency,
-      });
+    const {
+      data: latestRate,
+      error: rateError,
+    } = await supabase.rpc("get_daily_rate", {
+      p_rate_date: currentBusinessDay.business_date,
+      p_currency_from: sourceCurrency,
+      p_currency_to: destinationCurrency,
+    });
 
     if (rateError) {
       console.error(
@@ -358,28 +411,30 @@ export default function NewTransferPage() {
       return;
     }
 
-    const { data: transfer, error: insertError } =
-      await supabase
-        .from("transfer_requests")
-        .insert({
-          client_id: user.id,
-          agent_id: agentId,
-          amount: numericAmount,
-          source_amount: numericAmount,
-          currency: sourceCurrency,
-          destination_country: destinationCountry,
-          destination_currency: destinationCurrency,
-          rate_id: rate.id,
-          exchange_rate: currentRate,
-          destination_amount:
-            calculatedDestinationAmount,
-          recipient_name: recipientName.trim(),
-          recipient_phone:
-            recipientPhone.trim() || null,
-          status: "requested",
-        })
-        .select("id")
-        .single();
+    const {
+      data: transfer,
+      error: insertError,
+    } = await supabase
+      .from("transfer_requests")
+      .insert({
+        client_id: user.id,
+        agent_id: agentId,
+        amount: numericAmount,
+        source_amount: numericAmount,
+        currency: sourceCurrency,
+        destination_country: destinationCountry,
+        destination_currency: destinationCurrency,
+        rate_id: rate.id,
+        exchange_rate: currentRate,
+        destination_amount:
+          calculatedDestinationAmount,
+        recipient_name: recipientName.trim(),
+        recipient_phone:
+          recipientPhone.trim() || null,
+        status: "requested",
+      })
+      .select("id")
+      .single();
 
     if (insertError) {
       console.error(
@@ -393,11 +448,16 @@ export default function NewTransferPage() {
     }
 
     /*
-     * The database trigger automatically attaches the new
-     * transfer to the currently open Business Day.
+     * The database trigger automatically attaches the
+     * transfer to the current OPEN Business Day.
      */
     router.push(`/transfers/${transfer.id}`);
   }
+
+  const formDisabled =
+    loadingPage ||
+    !isBusinessDayOpen ||
+    submitting;
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
@@ -433,7 +493,15 @@ export default function NewTransferPage() {
                 </p>
               ) : businessDay ? (
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      isBusinessDayOpen
+                        ? "bg-green-500"
+                        : isBusinessDayClosing
+                          ? "bg-yellow-500"
+                          : "bg-gray-400"
+                    }`}
+                  />
 
                   <p className="font-semibold text-gray-900">
                     {formatBusinessDate(
@@ -453,16 +521,70 @@ export default function NewTransferPage() {
             </div>
 
             {businessDay && (
-              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                Operational
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  isBusinessDayOpen
+                    ? "bg-green-100 text-green-700"
+                    : isBusinessDayClosing
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {isBusinessDayOpen
+                  ? "Operational"
+                  : isBusinessDayClosing
+                    ? "Closing"
+                    : "Not Operational"}
               </span>
             )}
           </div>
         </div>
 
+        {/* Closing Business Day */}
+        {!loadingPage && isBusinessDayClosing && (
+          <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-5">
+            <p className="font-semibold text-yellow-900">
+              Transfers are closed for today.
+            </p>
+
+            <p className="mt-1 text-sm text-yellow-800">
+              The Business Day for{" "}
+              {formatBusinessDate(
+                businessDay!.business_date
+              )}{" "}
+              is currently closing. New transfers cannot be
+              created while Management completes the end-of-day
+              process.
+            </p>
+
+            <p className="mt-3 text-sm text-yellow-800">
+              Existing transfers can continue through their
+              normal operational workflow.
+            </p>
+          </div>
+        )}
+
+        {/* No Business Day */}
+        {!loadingPage && !businessDay && (
+          <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-5">
+            <p className="font-semibold text-yellow-900">
+              Transfers are currently unavailable.
+            </p>
+
+            <p className="mt-1 text-sm text-yellow-800">
+              There is no active Business Day. Please contact
+              Management before creating a transfer.
+            </p>
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
-          className="rounded-lg border border-gray-200 bg-white p-6"
+          className={`rounded-lg border border-gray-200 bg-white p-6 ${
+            !isBusinessDayOpen && !loadingPage
+              ? "opacity-75"
+              : ""
+          }`}
         >
           <div className="space-y-6">
             {/* Source Currency */}
@@ -476,11 +598,7 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setSourceCurrency(event.target.value)
                 }
-                disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting
-                }
+                disabled={formDisabled}
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               >
                 {CURRENCIES.map((currency) => (
@@ -506,11 +624,7 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setDestinationCountry(event.target.value)
                 }
-                disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting
-                }
+                disabled={formDisabled}
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               >
                 {DESTINATION_COUNTRIES.map(
@@ -542,11 +656,7 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setAmount(event.target.value)
                 }
-                disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting
-                }
+                disabled={formDisabled}
                 placeholder={`Amount in ${sourceCurrency}`}
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
@@ -611,9 +721,7 @@ export default function NewTransferPage() {
                   setAgentId(event.target.value)
                 }
                 disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting ||
+                  formDisabled ||
                   agents.length === 0
                 }
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
@@ -651,11 +759,7 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setRecipientName(event.target.value)
                 }
-                disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting
-                }
+                disabled={formDisabled}
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
             </div>
@@ -672,11 +776,7 @@ export default function NewTransferPage() {
                 onChange={(event) =>
                   setRecipientPhone(event.target.value)
                 }
-                disabled={
-                  loadingPage ||
-                  !businessDay ||
-                  submitting
-                }
+                disabled={formDisabled}
                 className="mt-2 w-full rounded border border-gray-300 px-3 py-2 disabled:bg-gray-100"
               />
             </div>
@@ -690,27 +790,13 @@ export default function NewTransferPage() {
               </div>
             )}
 
-            {/* Closed Business Day */}
-            {!loadingPage && !businessDay && (
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                <p className="font-medium text-yellow-900">
-                  Transfers are currently unavailable.
-                </p>
-
-                <p className="mt-1 text-sm text-yellow-800">
-                  There is no open Business Day. Please
-                  contact Management before creating a
-                  transfer.
-                </p>
-              </div>
-            )}
-
+            {/* Create Transfer */}
             <button
               type="submit"
               disabled={
                 loadingPage ||
                 submitting ||
-                !businessDay ||
+                !isBusinessDayOpen ||
                 loadingRate ||
                 !exchangeRate ||
                 !agentId
@@ -719,7 +805,9 @@ export default function NewTransferPage() {
             >
               {submitting
                 ? "Creating Transfer..."
-                : "Create Transfer"}
+                : isBusinessDayClosing
+                  ? "Transfers Closed"
+                  : "Create Transfer"}
             </button>
           </div>
         </form>

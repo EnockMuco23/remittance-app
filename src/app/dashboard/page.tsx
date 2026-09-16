@@ -3,6 +3,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import LogoutButton from "./logout-button";
 
+type BusinessDay = {
+  id: string;
+  business_date: string;
+  status: "open" | "closing" | "closed" | string;
+  opened_at: string | null;
+  opened_by: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -25,7 +35,6 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  // Send users to the correct dashboard for their role.
   if (profile.role === "agent") {
     redirect("/agent");
   }
@@ -42,96 +51,74 @@ export default async function DashboardPage() {
     redirect("/management");
   }
 
-  if (profile.role !== "client") {
-    redirect("/login");
-  }
-
-  // Get the client's recent transfers.
-  const { data: recentTransfers, error: transfersError } =
-    await supabase
+  const [
+    { data: transfers, error: transfersError },
+    { data: events, error: eventsError },
+    { data: businessDays, error: businessDayError },
+  ] = await Promise.all([
+    supabase
       .from("transfer_requests")
       .select(
-        "id, amount, currency, recipient_name, destination_country, status, created_at, completed_at"
+        "id, amount, currency, destination_country, recipient_name, status, created_at"
       )
       .eq("client_id", user.id)
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(5);
+      .order("created_at", { ascending: false })
+      .limit(5),
+
+    supabase
+      .from("transaction_events")
+      .select(
+        "id, transfer_id, event_type, created_at"
+      )
+      .eq("actor_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+
+    supabase.rpc("get_current_business_day"),
+  ]);
 
   if (transfersError) {
     console.error(
-      "Recent transfers error:",
+      "Client transfers error:",
       transfersError
     );
   }
 
-  // Get recent transaction activity for the client.
-  const transferIds =
-    recentTransfers?.map(
-      (transfer) => transfer.id
-    ) ?? [];
-
-  let recentEvents: Array<{
-    id: string;
-    transaction_id: string;
-    event_type: string;
-    notes: string | null;
-    created_at: string;
-  }> = [];
-
-  if (transferIds.length > 0) {
-    const { data: events, error: eventsError } =
-      await supabase
-        .from("transaction_events")
-        .select(
-          "id, transaction_id, event_type, notes, created_at"
-        )
-        .in("transaction_id", transferIds)
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(8);
-
-    if (eventsError) {
-      console.error(
-        "Recent transaction events error:",
-        eventsError
-      );
-    } else {
-      recentEvents = events ?? [];
-    }
+  if (eventsError) {
+    console.error(
+      "Client events error:",
+      eventsError
+    );
   }
 
-  function getStatusClasses(status: string) {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-800";
-
-      case "rejected":
-      case "cancelled":
-        return "bg-red-100 text-red-800";
-
-      case "requested":
-        return "bg-yellow-100 text-yellow-800";
-
-      default:
-        return "bg-blue-100 text-blue-800";
-    }
+  if (businessDayError) {
+    console.error(
+      "Business Day error:",
+      businessDayError
+    );
   }
 
-  function formatStatus(status: string) {
-    return status.replaceAll("_", " ");
-  }
+  const businessDay: BusinessDay | null =
+    Array.isArray(businessDays) &&
+    businessDays.length > 0
+      ? businessDays[0]
+      : null;
+
+  const isOpen =
+    businessDay?.status === "open";
+
+  const isClosing =
+    businessDay?.status === "closing";
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
       <div className="mx-auto max-w-6xl">
+
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">
-              Client Dashboard
+              Dashboard
             </h1>
 
             <p className="mt-2 text-gray-600">
@@ -142,20 +129,127 @@ export default async function DashboardPage() {
           <LogoutButton />
         </div>
 
-        {/* Main Actions */}
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <Link
-            href="/transfers/new"
-            className="rounded-lg bg-black p-6 text-white shadow transition hover:bg-gray-800"
-          >
-            <h2 className="text-xl font-bold">
-              New Transfer
-            </h2>
+        {/* Business Day Status */}
+        <div
+          className={`mb-8 rounded-lg border p-5 shadow-sm ${
+            isOpen
+              ? "border-green-200 bg-green-50"
+              : isClosing
+                ? "border-yellow-200 bg-yellow-50"
+                : "border-gray-200 bg-white"
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Business Day
+              </p>
 
-            <p className="mt-2 text-sm text-gray-300">
-              Create a new transfer request.
-            </p>
-          </Link>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={`h-3 w-3 rounded-full ${
+                    isOpen
+                      ? "bg-green-500"
+                      : isClosing
+                        ? "bg-yellow-500"
+                        : "bg-gray-400"
+                  }`}
+                />
+
+                <span className="text-lg font-bold">
+                  {isOpen
+                    ? "OPEN"
+                    : isClosing
+                      ? "CLOSING"
+                      : "CLOSED"}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-sm sm:text-right">
+              {businessDay ? (
+                <>
+                  <p className="font-medium text-gray-700">
+                    {new Date(
+                      `${businessDay.business_date}T00:00:00`
+                    ).toLocaleDateString()}
+                  </p>
+
+                  <p
+                    className={
+                      isOpen
+                        ? "text-green-700"
+                        : isClosing
+                          ? "text-yellow-700"
+                          : "text-gray-500"
+                    }
+                  >
+                    {isOpen
+                      ? "Transfers are available."
+                      : isClosing
+                        ? "New transfers are closed for today. You can still view existing transfers."
+                        : "No active Business Day."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-500">
+                  No active Business Day.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isClosing && (
+            <div className="mt-4 rounded-md border border-yellow-200 bg-yellow-100 p-3 text-sm text-yellow-900">
+              <strong>Business Day is closing:</strong>{" "}
+              New transfers cannot be created. Existing
+              transfers remain available for viewing.
+            </div>
+          )}
+
+          {!businessDay && (
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              Transfers are currently unavailable because
+              there is no active Business Day.
+            </div>
+          )}
+        </div>
+
+        {/* Main Actions */}
+        <div className="grid gap-6 md:grid-cols-2">
+
+          {isOpen ? (
+            <Link
+              href="/transfers/new"
+              className="rounded-lg bg-black p-6 text-white shadow transition hover:bg-gray-800"
+            >
+              <h2 className="text-xl font-bold">
+                New Transfer
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-300">
+                Start a new money transfer.
+              </p>
+            </Link>
+          ) : (
+            <div
+              className={`cursor-not-allowed rounded-lg p-6 shadow ${
+                isClosing
+                  ? "bg-yellow-100"
+                  : "bg-gray-200"
+              }`}
+            >
+              <h2 className="text-xl font-bold text-gray-700">
+                New Transfer
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-600">
+                {isClosing
+                  ? "New transfers are closed while the Business Day is closing."
+                  : "New transfers are currently unavailable."}
+              </p>
+            </div>
+          )}
 
           <Link
             href="/transfers"
@@ -166,206 +260,170 @@ export default async function DashboardPage() {
             </h2>
 
             <p className="mt-2 text-sm text-gray-600">
-              View your existing transfer requests
-              and their status.
+              View your transfer history and track existing
+              transfers.
             </p>
           </Link>
+
         </div>
 
         {/* Recent Transfers */}
-        <div className="mt-8 rounded-lg bg-white p-8 shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">
-                Recent Transfers
-              </h2>
+        <div className="mt-8 rounded-lg bg-white shadow">
 
-              <p className="mt-1 text-sm text-gray-500">
-                Your most recent transfer requests.
-              </p>
-            </div>
+          <div className="border-b p-6">
+            <h2 className="text-2xl font-bold">
+              Recent Transfers
+            </h2>
 
-            <Link
-              href="/transfers"
-              className="text-sm font-medium text-blue-600 hover:underline"
-            >
-              View All
-            </Link>
+            <p className="mt-1 text-gray-600">
+              Your most recent transfers.
+            </p>
           </div>
 
-          {!recentTransfers ||
-          recentTransfers.length === 0 ? (
-            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-6">
-              <p className="text-sm text-gray-500">
-                You have not created any transfers yet.
+          {!transfers ||
+          transfers.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">
+                You have no transfers yet.
               </p>
-
-              <Link
-                href="/transfers/new"
-                className="mt-3 inline-block text-sm font-medium text-blue-600 hover:underline"
-              >
-                Create your first transfer →
-              </Link>
             </div>
           ) : (
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[700px]">
-                <thead>
-                  <tr className="border-b text-left text-sm text-gray-500">
-                    <th className="pb-3 font-medium">
+            <div className="overflow-x-auto">
+
+              <table className="w-full">
+
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left">
                       Recipient
                     </th>
 
-                    <th className="pb-3 font-medium">
+                    <th className="px-6 py-4 text-left">
                       Amount
                     </th>
 
-                    <th className="pb-3 font-medium">
+                    <th className="px-6 py-4 text-left">
                       Destination
                     </th>
 
-                    <th className="pb-3 font-medium">
+                    <th className="px-6 py-4 text-left">
                       Status
                     </th>
 
-                    <th className="pb-3 font-medium">
+                    <th className="px-6 py-4 text-left">
                       Date
-                    </th>
-
-                    <th className="pb-3 font-medium">
                     </th>
                   </tr>
                 </thead>
 
-                <tbody>
-                  {recentTransfers.map(
+                <tbody className="divide-y">
+
+                  {transfers.map(
                     (transfer) => (
                       <tr
                         key={transfer.id}
-                        className="border-b last:border-b-0"
+                        className="hover:bg-gray-50"
                       >
-                        <td className="py-4 font-medium">
-                          {transfer.recipient_name}
+
+                        <td className="px-6 py-4">
+                          <Link
+                            href={`/transfers/${transfer.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {transfer.recipient_name}
+                          </Link>
                         </td>
 
-                        <td className="py-4">
+                        <td className="px-6 py-4">
                           {transfer.amount}{" "}
                           {transfer.currency}
                         </td>
 
-                        <td className="py-4">
+                        <td className="px-6 py-4">
                           {transfer.destination_country}
                         </td>
 
-                        <td className="py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${getStatusClasses(
-                              transfer.status
-                            )}`}
-                          >
-                            {formatStatus(
-                              transfer.status
-                            )}
-                          </span>
+                        <td className="px-6 py-4 capitalize">
+                          {transfer.status.replaceAll(
+                            "_",
+                            " "
+                          )}
                         </td>
 
-                        <td className="py-4 text-sm text-gray-500">
+                        <td className="px-6 py-4 text-sm text-gray-500">
                           {new Date(
                             transfer.created_at
                           ).toLocaleDateString()}
                         </td>
 
-                        <td className="py-4 text-right">
-                          <Link
-                            href={`/transfers/${transfer.id}`}
-                            className="text-sm font-medium text-blue-600 hover:underline"
-                          >
-                            View
-                          </Link>
-                        </td>
                       </tr>
                     )
                   )}
+
                 </tbody>
+
               </table>
+
             </div>
           )}
+
         </div>
 
-        {/* Recent Activity / Timeline */}
-        <div className="mt-8 rounded-lg bg-white p-8 shadow">
-          <div>
+        {/* Recent Activity */}
+        <div className="mt-8 rounded-lg bg-white shadow">
+
+          <div className="border-b p-6">
             <h2 className="text-2xl font-bold">
               Recent Activity
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Recent updates across your transfers.
+            <p className="mt-1 text-gray-600">
+              Recent activity on your account.
             </p>
           </div>
 
-          {recentEvents.length === 0 ? (
-            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-6">
-              <p className="text-sm text-gray-500">
-                No transaction activity yet.
+          {!events ||
+          events.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">
+                No recent activity.
               </p>
             </div>
           ) : (
-            <div className="mt-6 space-y-6">
-              {recentEvents.map((event) => {
-                const transfer =
-                  recentTransfers?.find(
-                    (item) =>
-                      item.id ===
-                      event.transaction_id
-                  );
+            <div className="divide-y">
 
-                return (
-                  <div
-                    key={event.id}
-                    className="flex gap-4"
-                  >
-                    <div className="flex flex-col items-center">
-                      <div className="mt-1 h-3 w-3 rounded-full bg-blue-600" />
-
-                      <div className="mt-2 h-full w-px bg-gray-200" />
-                    </div>
-
-                    <div className="pb-2">
-                      <p className="font-medium capitalize">
-                        {formatStatus(
-                          event.event_type
-                        )}
-                      </p>
-
-                      {transfer && (
-                        <Link
-                          href={`/transfers/${transfer.id}`}
-                          className="mt-1 block text-sm font-medium text-blue-600 hover:underline"
-                        >
-                          Transfer to{" "}
-                          {transfer.recipient_name}
-                        </Link>
+              {events.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center justify-between p-6"
+                >
+                  <div>
+                    <p className="font-medium capitalize">
+                      {event.event_type.replaceAll(
+                        "_",
+                        " "
                       )}
+                    </p>
 
-                      {event.notes && (
-                        <p className="mt-1 text-sm text-gray-600">
-                          {event.notes}
-                        </p>
-                      )}
-
-                      <p className="mt-1 text-xs text-gray-400">
-                        {new Date(
-                          event.created_at
-                        ).toLocaleString()}
-                      </p>
-                    </div>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Transfer{" "}
+                      {event.transfer_id}
+                    </p>
                   </div>
-                );
-              })}
+
+                  <p className="text-sm text-gray-500">
+                    {new Date(
+                      event.created_at
+                    ).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+
             </div>
           )}
+
         </div>
+
       </div>
     </main>
   );

@@ -3,6 +3,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import LogoutButton from "../dashboard/logout-button";
 
+type BusinessDay = {
+  id: string;
+  business_date: string;
+  status: "open" | "closing" | "closed" | string;
+  opened_at: string | null;
+  opened_by: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export default async function AgentDashboardPage() {
   const supabase = await createClient();
 
@@ -14,12 +24,11 @@ export default async function AgentDashboardPage() {
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } =
-    await supabase
-      .from("profiles")
-      .select("full_name, role")
-      .eq("id", user.id)
-      .single();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", user.id)
+    .single();
 
   if (
     profileError ||
@@ -29,24 +38,39 @@ export default async function AgentDashboardPage() {
     redirect("/dashboard");
   }
 
-  const { data: transfers, error } =
-    await supabase
+  const [
+    { data: transfers, error },
+    { data: businessDays, error: businessDayError },
+  ] = await Promise.all([
+    supabase
       .from("transfer_requests")
       .select("*")
       .eq("agent_id", user.id)
       .order("created_at", {
         ascending: false,
-      });
+      }),
+
+    supabase.rpc("get_current_business_day"),
+  ]);
 
   if (error) {
+    console.error("Agent transfers error:", error);
+  }
+
+  if (businessDayError) {
     console.error(
-      "Agent transfers error:",
-      error
+      "Business Day error:",
+      businessDayError
     );
   }
 
-  const totalTransfers =
-    transfers?.length || 0;
+  const businessDay: BusinessDay | null =
+    Array.isArray(businessDays) &&
+    businessDays.length > 0
+      ? businessDays[0]
+      : null;
+
+  const totalTransfers = transfers?.length || 0;
 
   const awaitingApproval =
     transfers?.filter(
@@ -60,11 +84,9 @@ export default async function AgentDashboardPage() {
         transfer.status === "completed"
     ).length || 0;
 
-  // Latest five transfers for the Recent Transfers section.
   const recentTransfers =
     transfers?.slice(0, 5) || [];
 
-  // Get recent activity for the agent's transfers.
   const transferIds =
     recentTransfers.map(
       (transfer) => transfer.id
@@ -106,6 +128,12 @@ export default async function AgentDashboardPage() {
     }
   }
 
+  const isOpen =
+    businessDay?.status === "open";
+
+  const isClosing =
+    businessDay?.status === "closing";
+
   function getStatusClasses(
     status: string
   ) {
@@ -134,17 +162,15 @@ export default async function AgentDashboardPage() {
   }
 
   function formatStatus(status: string) {
-    return status.replaceAll(
-      "_",
-      " "
-    );
+    return status.replaceAll("_", " ");
   }
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
       <div className="mx-auto max-w-6xl">
+
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">
               Agent Dashboard
@@ -156,6 +182,87 @@ export default async function AgentDashboardPage() {
           </div>
 
           <LogoutButton />
+        </div>
+
+        {/* Business Day Status */}
+        <div
+          className={`mb-8 rounded-lg border p-5 shadow-sm ${
+            isOpen
+              ? "border-green-200 bg-green-50"
+              : isClosing
+                ? "border-yellow-200 bg-yellow-50"
+                : "border-gray-200 bg-white"
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Business Day
+              </p>
+
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={`h-3 w-3 rounded-full ${
+                    isOpen
+                      ? "bg-green-500"
+                      : isClosing
+                        ? "bg-yellow-500"
+                        : "bg-gray-400"
+                  }`}
+                />
+
+                <span className="text-lg font-bold">
+                  {isOpen
+                    ? "OPEN"
+                    : isClosing
+                      ? "CLOSING"
+                      : "CLOSED"}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-sm sm:text-right">
+              {businessDay ? (
+                <>
+                  <p className="font-medium text-gray-700">
+                    {new Date(
+                      `${businessDay.business_date}T00:00:00`
+                    ).toLocaleDateString()}
+                  </p>
+
+                  <p
+                    className={
+                      isOpen
+                        ? "text-green-700"
+                        : isClosing
+                          ? "text-yellow-700"
+                          : "text-gray-500"
+                    }
+                  >
+                    {isOpen
+                      ? "Normal operations"
+                      : isClosing
+                        ? "New transfers are closed. Existing transfers may continue."
+                        : "No active Business Day"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-500">
+                  No active Business Day
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isClosing && (
+            <div className="mt-4 rounded-md border border-yellow-200 bg-yellow-100 p-3 text-sm text-yellow-900">
+              <strong>Closing:</strong>{" "}
+              You cannot create new transfers,
+              but transfers already assigned to
+              you may continue through their normal
+              workflow.
+            </div>
+          )}
         </div>
 
         {/* Summary Cards */}

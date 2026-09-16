@@ -21,10 +21,13 @@ export default async function TransfersPage() {
   const { data: transfers, error } = await supabase
     .from("transfer_requests")
     .select("*")
+    .eq("client_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error(error);
+    throw new Error(
+      `Failed to load transfers: ${error.message}`
+    );
   }
 
   const agentMap: Record<string, string> = {};
@@ -35,20 +38,23 @@ export default async function TransfersPage() {
         continue;
       }
 
-      const { data: agentData, error: agentError } =
-        await supabase.rpc("get_transfer_agent", {
-          transfer_id: transfer.id,
-        });
+      try {
+        const { data: agentData, error: agentError } =
+          await supabase.rpc("get_transfer_agent", {
+            transfer_id: transfer.id,
+          });
 
-      if (agentError) {
-        console.error(agentError);
+        if (agentError) {
+          continue;
+        }
+
+        const agent = agentData?.[0] as Agent | undefined;
+
+        if (agent) {
+          agentMap[transfer.id] = agent.full_name;
+        }
+      } catch {
         continue;
-      }
-
-      const agent = agentData?.[0] as Agent | undefined;
-
-      if (agent) {
-        agentMap[transfer.id] = agent.full_name;
       }
     }
   }
@@ -138,11 +144,13 @@ export default async function TransfersPage() {
                       </td>
 
                       <td className="px-6 py-4">
-                        {transfer.amount} {transfer.currency}
+                        {transfer.amount}{" "}
+                        {transfer.currency}
                       </td>
 
                       <td className="px-6 py-4">
-                        {agentMap[transfer.id] || "Not assigned"}
+                        {agentMap[transfer.id] ||
+                          "Not assigned"}
                       </td>
 
                       <td className="px-6 py-4">
@@ -150,7 +158,10 @@ export default async function TransfersPage() {
                       </td>
 
                       <td className="px-6 py-4 capitalize">
-                        {transfer.status.replaceAll("_", " ")}
+                        {transfer.status.replaceAll(
+                          "_",
+                          " "
+                        )}
                       </td>
 
                       <td className="px-6 py-4 text-sm text-gray-500">

@@ -3,6 +3,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import LogoutButton from "../dashboard/logout-button";
 
+type BusinessDay = {
+  id: string;
+  business_date: string;
+  status: "open" | "closing" | "closed" | string;
+  opened_at: string | null;
+  opened_by: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export default async function ManagementDashboardPage() {
   const supabase = await createClient();
 
@@ -34,10 +44,13 @@ export default async function ManagementDashboardPage() {
       supabase.rpc("get_current_business_day"),
     ]);
 
-  const businessDay =
+  const businessDay: BusinessDay | null =
     Array.isArray(businessDays) && businessDays.length > 0
       ? businessDays[0]
       : null;
+
+  const isOpen = businessDay?.status === "open";
+  const isClosing = businessDay?.status === "closing";
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
@@ -68,20 +81,45 @@ export default async function ManagementDashboardPage() {
               <div className="mt-2 flex items-center gap-3">
                 <span
                   className={`h-3 w-3 rounded-full ${
-                    businessDay ? "bg-green-500" : "bg-gray-400"
+                    isOpen
+                      ? "bg-green-500"
+                      : isClosing
+                        ? "bg-yellow-500"
+                        : "bg-gray-400"
                   }`}
                 />
 
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {businessDay ? "Open" : "Closed"}
+                  {isOpen
+                    ? "Open"
+                    : isClosing
+                      ? "Closing"
+                      : "Closed"}
                 </h2>
               </div>
 
               <p className="mt-1 text-sm text-gray-500">
-                {businessDay
+                {isOpen
                   ? `Operational date: ${businessDay.business_date}`
-                  : "No Business Day is currently open."}
+                  : isClosing
+                    ? `Closing date: ${businessDay.business_date}`
+                    : "No Business Day is currently active."}
               </p>
+
+              {isClosing && (
+                <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+                  <p className="text-sm font-medium text-yellow-900">
+                    Business Day is closing
+                  </p>
+
+                  <p className="mt-1 text-sm text-yellow-800">
+                    New transfers and new Paybot cash sessions are blocked.
+                    Existing operational work can continue until it is
+                    completed and reconciled. Exchange rates can still be
+                    entered during closing.
+                  </p>
+                </div>
+              )}
             </div>
 
             <Link
@@ -128,6 +166,24 @@ export default async function ManagementDashboardPage() {
 
             <p className="mt-3 text-sm font-medium text-blue-600">
               Manage daily rates →
+            </p>
+          </Link>
+
+          {/* Cash Corrections */}
+          <Link
+            href="/management/cash-corrections"
+            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-sm font-medium text-gray-500">
+              Paybot Cash
+            </p>
+
+            <p className="mt-2 text-3xl font-bold text-gray-900">
+              Corrections
+            </p>
+
+            <p className="mt-3 text-sm font-medium text-blue-600">
+              Review cash corrections →
             </p>
           </Link>
 
