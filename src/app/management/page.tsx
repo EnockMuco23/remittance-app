@@ -90,11 +90,7 @@ export default async function ManagementDashboardPage() {
                 />
 
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {isOpen
-                    ? "Open"
-                    : isClosing
-                      ? "Closing"
-                      : "Closed"}
+                  {isOpen ? "Open" : isClosing ? "Closing" : "Closed"}
                 </h2>
               </div>
 
@@ -133,7 +129,7 @@ export default async function ManagementDashboardPage() {
 
         {/* Management Modules */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* Paybots */}
+          {/* Paybot Applications */}
           <Link
             href="/management/paybots"
             className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -151,86 +147,41 @@ export default async function ManagementDashboardPage() {
             </p>
           </Link>
 
-          {/* Daily Rates */}
+          {/* Workforce */}
           <Link
-            href="/management/rates"
+            href="/management/workforce"
             className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <p className="text-sm font-medium text-gray-500">
-              Exchange Rates
+              Workforce
             </p>
 
             <p className="mt-2 text-3xl font-bold text-gray-900">
-              Rates
+              Agents &amp; Paybots
             </p>
 
             <p className="mt-3 text-sm font-medium text-blue-600">
-              Manage daily rates →
+              Manage workforce →
             </p>
           </Link>
-
-          {/* Cash Corrections */}
-          <Link
-            href="/management/cash-corrections"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <p className="text-sm font-medium text-gray-500">
-              Paybot Cash
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              Corrections
-            </p>
-
-            <p className="mt-3 text-sm font-medium text-blue-600">
-              Review cash corrections →
-            </p>
-          </Link>
-
-          {/* Staff */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">
-              Staff
-            </p>
-
-            <p className="mt-2 text-lg font-semibold text-gray-900">
-              Staff Management
-            </p>
-
-            <p className="mt-2 text-sm text-gray-600">
-              Agent and auditor management will be added here.
-            </p>
-          </div>
 
           {/* Transfers */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <Link
+            href="/management/transfers"
+            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
             <p className="text-sm font-medium text-gray-500">
               Transfers
             </p>
 
-            <p className="mt-2 text-lg font-semibold text-gray-900">
-              Transfer Management
+            <p className="mt-2 text-3xl font-bold text-gray-900">
+              Transfers
             </p>
 
-            <p className="mt-2 text-sm text-gray-600">
-              Transfer monitoring and management will be added here.
+            <p className="mt-3 text-sm font-medium text-blue-600">
+              Monitor and manage transfers →
             </p>
-          </div>
-
-          {/* Audit */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">
-              Audit
-            </p>
-
-            <p className="mt-2 text-lg font-semibold text-gray-900">
-              Audit &amp; Controls
-            </p>
-
-            <p className="mt-2 text-sm text-gray-600">
-              Operational audit and control dashboards will be added here.
-            </p>
-          </div>
+          </Link>
         </div>
       </div>
     </main>
