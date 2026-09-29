@@ -10,6 +10,7 @@ export default function ApprovePaybotButton({
   registrationId: string;
 }) {
   const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,13 +41,13 @@ export default function ApprovePaybotButton({
       <button
         onClick={approvePaybot}
         disabled={loading}
-        className="rounded bg-black px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:bg-gray-400"
+        className="rounded-xl bg-[#007aff] px-4 py-2.5 text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
       >
         {loading ? "Approving..." : "Approve"}
       </button>
 
       {error && (
-        <p className="mt-2 text-xs text-red-600">
+        <p className="mt-2 max-w-[220px] text-xs text-[#ff3b30]">
           {error}
         </p>
       )}

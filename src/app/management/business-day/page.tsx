@@ -53,7 +53,7 @@ function healthLabel(status: CashHealth["health_status"]) {
     case "healthy":
       return "Healthy";
     case "explained":
-      return "Explained discrepancies";
+      return "Explained";
     case "attention_required":
       return "Attention required";
     case "pending_reconciliation":
@@ -66,15 +66,15 @@ function healthLabel(status: CashHealth["health_status"]) {
 function healthClasses(status: CashHealth["health_status"]) {
   switch (status) {
     case "healthy":
-      return "border-green-200 bg-green-50 text-green-800";
+      return "bg-[#34c759]";
     case "explained":
-      return "border-blue-200 bg-blue-50 text-blue-800";
+      return "bg-[#007aff]";
     case "attention_required":
-      return "border-red-200 bg-red-50 text-red-800";
+      return "bg-[#ff3b30]";
     case "pending_reconciliation":
-      return "border-yellow-200 bg-yellow-50 text-yellow-800";
+      return "bg-[#ffcc00]";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-800";
+      return "bg-[#86868b]";
   }
 }
 
@@ -101,7 +101,9 @@ export default function BusinessDayPage() {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase.rpc("get_current_business_day");
+    const { data, error } = await supabase.rpc(
+      "get_current_business_day"
+    );
 
     if (error) {
       setError(error.message);
@@ -218,120 +220,125 @@ export default function BusinessDayPage() {
   const isOpen = businessDay?.status === "open";
   const isClosing = businessDay?.status === "closing";
 
+  const statusLabel = isOpen
+    ? "Open"
+    : isClosing
+      ? "Closing"
+      : "Closed";
+
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+      <div className="mx-auto max-w-[1180px] px-5 py-8 sm:px-8 lg:px-10">
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-950">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">
               Business Day
             </h1>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Open, close, and finalize the company operating day.
+            <p className="mt-2 text-[#86868b]">
+              Open, close, and finalize
             </p>
           </div>
 
           <Link
             href="/management"
-            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-50"
+            className="rounded-xl bg-white px-4 py-3 text-center text-sm font-medium text-[#1d1d1f] shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition hover:bg-[#fafafa]"
           >
-            ← Management Dashboard
+            Management
           </Link>
-        </div>
+        </header>
 
         {message && (
-          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <div className="mb-6 rounded-[18px] bg-white px-5 py-4 text-sm text-[#34c759] shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
             {message}
           </div>
         )}
 
         {error && !showOpenModal && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <div className="mb-6 rounded-[18px] bg-white px-5 py-4 text-sm text-[#ff3b30] shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
             {error}
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Current Business Day */}
-          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-950">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section className="rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+            <p className="text-sm text-[#86868b]">
               Current Business Day
-            </h2>
+            </p>
 
             {loading ? (
-              <div className="mt-6 text-sm text-gray-500">
-                Loading business day...
+              <div className="mt-8 text-sm text-[#86868b]">
+                Loading...
               </div>
             ) : businessDay ? (
-              <div className="mt-6 space-y-5">
+              <div className="mt-8">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <p className="text-sm text-[#86868b]">
                     Business Date
                   </p>
 
-                  <p className="mt-1 text-lg font-semibold text-gray-950">
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.02em]">
                     {formatDate(businessDay.business_date)}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <div className="mt-7">
+                  <p className="text-sm text-[#86868b]">
                     Status
                   </p>
 
-                  <span
-                    className={`mt-2 inline-flex rounded-full border px-3 py-1 text-sm font-medium ${
-                      businessDay.status === "open"
-                        ? "border-green-200 bg-green-50 text-green-800"
-                        : businessDay.status === "closing"
-                        ? "border-yellow-200 bg-yellow-50 text-yellow-800"
-                        : "border-gray-200 bg-gray-50 text-gray-700"
-                    }`}
-                  >
-                    {businessDay.status === "open"
-                      ? "Open"
-                      : businessDay.status === "closing"
-                      ? "Closing"
-                      : "Closed"}
-                  </span>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className={`h-2 w-2 rounded-full ${
+                        isOpen
+                          ? "bg-[#34c759]"
+                          : isClosing
+                            ? "bg-[#ffcc00]"
+                            : "bg-[#86868b]"
+                      }`}
+                    />
+
+                    <span className="text-lg font-semibold">
+                      {statusLabel}
+                    </span>
+                  </div>
                 </div>
 
                 {isOpen && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                    <p className="text-sm font-medium text-green-900">
+                  <div className="mt-7 rounded-[18px] bg-[#f5f5f7] p-5">
+                    <p className="font-medium">
                       Business day is open
                     </p>
 
-                    <p className="mt-1 text-sm text-green-800">
-                      New transfers, Paybot cash sessions, and rate entry are
-                      available.
+                    <p className="mt-2 text-sm leading-6 text-[#86868b]">
+                      New transfers, Paybot cash sessions, and rate entry
+                      are available.
                     </p>
                   </div>
                 )}
 
                 {isClosing && (
-                  <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
-                    <p className="text-sm font-medium text-yellow-900">
+                  <div className="mt-7 rounded-[18px] bg-[#fff9e6] p-5">
+                    <p className="font-medium">
                       Business day is closing
                     </p>
 
-                    <p className="mt-1 text-sm text-yellow-800">
-                      New transfers and new Paybot cash sessions are blocked.
-                      Existing operational work can continue, and exchange
-                      rates can still be entered.
+                    <p className="mt-2 text-sm leading-6 text-[#86868b]">
+                      New transfers and new Paybot cash sessions are
+                      blocked. Existing work can continue.
                     </p>
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-3">
+                <div className="mt-7">
                   {isOpen && (
                     <button
                       onClick={beginClosing}
                       disabled={closing}
-                      className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full rounded-xl bg-[#007aff] px-5 py-3 text-sm font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {closing ? "Beginning Closing..." : "Begin Closing"}
+                      {closing ? "Closing..." : "Begin Closing"}
                     </button>
                   )}
 
@@ -339,43 +346,43 @@ export default function BusinessDayPage() {
                     <button
                       onClick={finalizeBusinessDay}
                       disabled={finalizing}
-                      className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full rounded-xl bg-[#007aff] px-5 py-3 text-sm font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {finalizing
-                        ? "Finalizing..."
-                        : "Finalize Business Day"}
+                      {finalizing ? "Finalizing..." : "Finalize"}
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <p className="text-sm font-medium text-gray-900">
+              <div className="mt-8 rounded-[18px] bg-[#f5f5f7] p-5">
+                <p className="font-medium">
                   No active business day
                 </p>
 
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-[#86868b]">
                   The company is currently closed.
                 </p>
               </div>
             )}
           </section>
 
-          {/* Open New Day */}
-          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-950">
+          <section className="rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+            <p className="text-sm text-[#86868b]">
               Open Business Day
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-gray-500">
-              Before opening a new day, the system will review the previous
-              business day&apos;s Paybot cash reconciliation.
             </p>
 
-            <div className="mt-6">
+            <p className="mt-3 text-lg font-semibold">
+              Choose a date
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-[#86868b]">
+              Cash reconciliation will be reviewed before opening.
+            </p>
+
+            <div className="mt-7">
               <label
                 htmlFor="business-date"
-                className="block text-sm font-medium text-gray-900"
+                className="block text-sm font-medium"
               >
                 Business Date
               </label>
@@ -385,285 +392,295 @@ export default function BusinessDayPage() {
                 type="date"
                 value={openDate}
                 onChange={(e) => setOpenDate(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-950 focus:ring-1 focus:ring-gray-950"
+                className="mt-2 w-full rounded-xl bg-[#f0f0f2] px-4 py-3 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#007aff]"
               />
             </div>
 
             <button
               onClick={prepareOpenBusinessDay}
               disabled={loading || !!businessDay}
-              className="mt-5 w-full rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-5 w-full rounded-xl bg-[#007aff] px-5 py-3 text-sm font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Open Business Day
+              Open
             </button>
 
             {businessDay && (
-              <p className="mt-3 text-xs leading-5 text-gray-500">
-                You must finalize the current business day before opening
-                another one.
+              <p className="mt-3 text-center text-xs text-[#86868b]">
+                Finalize the current business day first.
               </p>
             )}
           </section>
         </div>
 
-        {/* Operating Rules */}
-        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-950">
+        <section className="mt-6 rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+          <p className="text-sm text-[#86868b]">
             Business Day Rules
-          </h2>
+          </p>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="font-medium text-gray-950">Open</p>
+          <div className="mt-6 grid gap-6 md:grid-cols-3">
+            <div>
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-[#34c759]"
+                />
 
-              <p className="mt-1 text-sm leading-5 text-gray-500">
-                New transfers, new Paybot cash sessions, and rate entry are
-                allowed.
+                <p className="font-semibold">Open</p>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-[#86868b]">
+                Transfers, Paybot cash sessions, and rate entry are allowed.
               </p>
             </div>
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="font-medium text-gray-950">Closing</p>
+            <div>
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-[#ffcc00]"
+                />
 
-              <p className="mt-1 text-sm leading-5 text-gray-500">
-                New transfers and new Paybot cash sessions are blocked.
-                Existing work can continue.
+                <p className="font-semibold">Closing</p>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-[#86868b]">
+                New transfers and Paybot cash sessions are blocked.
               </p>
             </div>
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="font-medium text-gray-950">Closed</p>
+            <div>
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-[#86868b]"
+                />
 
-              <p className="mt-1 text-sm leading-5 text-gray-500">
-                Operational activity is stopped until Management opens the
-                next business day.
+                <p className="font-semibold">Closed</p>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-[#86868b]">
+                Operational activity is stopped until the next business day.
               </p>
             </div>
           </div>
         </section>
       </div>
 
-      {/* Open Business Day Health Confirmation Modal */}
       {showOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-3 sm:p-4">
-          <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5">
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold text-gray-950">
-                  Company Cash Health Review
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-[24px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.15)]">
+            <div className="flex items-start justify-between px-6 py-5">
+              <div>
+                <h2 className="text-xl font-semibold tracking-[-0.02em]">
+                  Cash Health
                 </h2>
 
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Review the previous business day before opening the next one.
+                <p className="mt-1 text-sm text-[#86868b]">
+                  Review before opening
                 </p>
               </div>
 
               <button
                 onClick={closeOpenModal}
                 disabled={opening}
-                className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full px-2 py-1 text-lg text-[#86868b] transition hover:bg-[#f5f5f7] disabled:opacity-50"
                 aria-label="Close"
               >
-                ✕
+                ×
               </button>
             </div>
 
-            {/* Scrollable Modal Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
               {healthLoading ? (
-                <div className="py-8 text-center text-sm text-gray-500">
-                  Checking company cash health...
+                <div className="py-10 text-center text-sm text-[#86868b]">
+                  Checking...
                 </div>
               ) : health ? (
-                <div className="space-y-3">
-                  <div
-                    className={`rounded-lg border px-3 py-2.5 ${healthClasses(
-                      health.health_status
-                    )}`}
-                  >
-                    <p className="text-[11px] font-medium uppercase tracking-wide opacity-75">
-                      Company Cash Health
-                    </p>
+                <div className="space-y-5">
+                  <div className="rounded-[18px] bg-[#f5f5f7] p-5">
+                    <div className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 rounded-full ${healthClasses(
+                          health.health_status
+                        )}`}
+                      />
 
-                    <p className="mt-0.5 text-sm font-semibold">
-                      {healthLabel(health.health_status)}
-                    </p>
+                      <p className="font-semibold">
+                        {healthLabel(health.health_status)}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                  <div>
+                    <p className="text-sm text-[#86868b]">
                       Previous Business Day
                     </p>
 
-                    <p className="mt-0.5 text-sm font-medium text-gray-950">
+                    <p className="mt-1 font-semibold">
                       {formatDate(health.business_date)}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="text-xs text-gray-500">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                      <p className="text-sm text-[#86868b]">
                         Paybot Sessions
                       </p>
 
-                      <p className="mt-0.5 text-lg font-semibold text-gray-950">
+                      <p className="mt-2 text-2xl font-semibold tabular-nums">
                         {health.total_sessions}
                       </p>
                     </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="text-xs text-gray-500">
-                        Closed Sessions
+                    <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                      <p className="text-sm text-[#86868b]">
+                        Closed
                       </p>
 
-                      <p className="mt-0.5 text-lg font-semibold text-gray-950">
+                      <p className="mt-2 text-2xl font-semibold tabular-nums">
                         {health.closed_sessions}
                       </p>
                     </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="text-xs text-gray-500">
-                        Open Sessions
+                    <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                      <p className="text-sm text-[#86868b]">
+                        Open
                       </p>
 
-                      <p className="mt-0.5 text-lg font-semibold text-gray-950">
+                      <p className="mt-2 text-2xl font-semibold tabular-nums">
                         {health.open_sessions}
                       </p>
                     </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="text-xs text-gray-500">
-                        Discrepancy Sessions
+                    <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                      <p className="text-sm text-[#86868b]">
+                        Discrepancies
                       </p>
 
-                      <p className="mt-0.5 text-lg font-semibold text-gray-950">
+                      <p className="mt-2 text-2xl font-semibold tabular-nums">
                         {health.discrepancy_sessions}
                       </p>
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="space-y-4 rounded-[18px] bg-[#f5f5f7] p-5">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-xs text-gray-600">
-                        Unresolved discrepancy sessions
+                      <span className="text-sm text-[#86868b]">
+                        Unresolved sessions
                       </span>
 
-                      <span className="text-sm font-semibold text-gray-950">
+                      <span className="font-semibold tabular-nums">
                         {health.unresolved_discrepancy_sessions}
                       </span>
                     </div>
 
-                    <div className="mt-2.5 flex items-center justify-between gap-4">
-                      <span className="text-xs text-gray-600">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-[#86868b]">
                         Unresolved exposure
                       </span>
 
                       <span
-                        className={`text-sm font-semibold ${
+                        className={`font-semibold tabular-nums ${
                           health.unresolved_discrepancy_amount > 0
-                            ? "text-red-700"
-                            : "text-gray-950"
+                            ? "text-[#ff3b30]"
+                            : ""
                         }`}
                       >
-                        {formatMoney(health.unresolved_discrepancy_amount)}
+                        {formatMoney(
+                          health.unresolved_discrepancy_amount
+                        )}
                       </span>
                     </div>
 
-                    <div className="mt-2.5 flex items-center justify-between gap-4">
-                      <span className="text-xs text-gray-600">
-                        Total absolute discrepancy
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-[#86868b]">
+                        Total discrepancy
                       </span>
 
-                      <span className="text-sm font-semibold text-gray-950">
-                        {formatMoney(health.total_absolute_discrepancy)}
+                      <span className="font-semibold tabular-nums">
+                        {formatMoney(
+                          health.total_absolute_discrepancy
+                        )}
                       </span>
                     </div>
                   </div>
 
-                  {health.health_status === "attention_required" ? (
-                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-                      <p className="text-xs font-medium text-yellow-900">
-                        Management attention required
+                  {health.health_status === "attention_required" && (
+                    <div className="rounded-[18px] bg-[#fff0ef] p-5">
+                      <p className="font-medium text-[#ff3b30]">
+                        Attention required
                       </p>
 
-                      <p className="mt-1 text-xs leading-5 text-yellow-800">
-                        There are unresolved cash discrepancies from the
-                        previous business day. You may still open the new
-                        business day, but you are explicitly acknowledging this
-                        condition.
+                      <p className="mt-2 text-sm leading-6 text-[#86868b]">
+                        Unresolved cash discrepancies exist. Opening will
+                        acknowledge this condition.
                       </p>
                     </div>
-                  ) : health.health_status === "explained" ? (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                      <p className="text-xs font-medium text-blue-900">
-                        Discrepancies have been addressed
+                  )}
+
+                  {health.health_status === "explained" && (
+                    <div className="rounded-[18px] bg-[#f0f7ff] p-5">
+                      <p className="font-medium text-[#007aff]">
+                        Discrepancies addressed
                       </p>
 
-                      <p className="mt-1 text-xs leading-5 text-blue-800">
-                        Discrepancies exist in the previous day&apos;s
-                        reconciliation, but they have recorded corrections.
+                      <p className="mt-2 text-sm leading-6 text-[#86868b]">
+                        Recorded corrections exist for the previous day.
                       </p>
                     </div>
-                  ) : health.health_status === "pending_reconciliation" ? (
-                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-                      <p className="text-xs font-medium text-yellow-900">
-                        Reconciliation is still pending
+                  )}
+
+                  {health.health_status === "pending_reconciliation" && (
+                    <div className="rounded-[18px] bg-[#fff9e6] p-5">
+                      <p className="font-medium">
+                        Reconciliation pending
                       </p>
 
-                      <p className="mt-1 text-xs leading-5 text-yellow-800">
-                        Some Paybot cash sessions from the previous day are
-                        still open.
+                      <p className="mt-2 text-sm leading-6 text-[#86868b]">
+                        Some Paybot cash sessions are still open.
                       </p>
                     </div>
-                  ) : (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="text-xs font-medium text-green-900">
-                        Company cash position looks healthy
+                  )}
+
+                  {health.health_status === "healthy" && (
+                    <div className="rounded-[18px] bg-[#f0fff4] p-5">
+                      <p className="font-medium text-[#34c759]">
+                        Cash position looks healthy
                       </p>
 
-                      <p className="mt-1 text-xs leading-5 text-green-800">
+                      <p className="mt-2 text-sm leading-6 text-[#86868b]">
                         No unresolved Paybot cash discrepancies were found.
                       </p>
                     </div>
                   )}
 
-                  <div className="border-t border-gray-200 pt-3">
-                    <p className="text-xs text-gray-600">
-                      You are about to open{" "}
-                      <span className="font-semibold text-gray-950">
-                        {formatDate(openDate)}
-                      </span>
-                      .
-                    </p>
-
-                    <p className="mt-1.5 text-[11px] leading-5 text-gray-500">
-                      By confirming, Management acknowledges the cash health
-                      information shown above and authorizes the new business
-                      day to open.
-                    </p>
+                  <div className="pt-2 text-sm text-[#86868b]">
+                    Opening{" "}
+                    <span className="font-semibold text-[#1d1d1f]">
+                      {formatDate(openDate)}
+                    </span>
+                    .
                   </div>
                 </div>
               ) : (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-                  Unable to retrieve the company cash health. Please close this
-                  window and try again.
+                <div className="rounded-[18px] bg-[#fff0ef] p-5 text-sm text-[#ff3b30]">
+                  Unable to retrieve cash health.
                 </div>
               )}
 
               {error && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-800">
+                <div className="mt-4 rounded-[18px] bg-[#fff0ef] p-4 text-sm text-[#ff3b30]">
                   {error}
                 </div>
               )}
             </div>
 
-            {/* Fixed Modal Footer */}
-            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-gray-200 bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+            <div className="flex flex-col-reverse gap-3 px-6 py-5 sm:flex-row sm:justify-end">
               <button
                 onClick={closeOpenModal}
                 disabled={opening}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl px-5 py-3 text-sm font-medium text-[#1d1d1f] transition hover:bg-[#f5f5f7] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -671,11 +688,9 @@ export default function BusinessDayPage() {
               <button
                 onClick={confirmOpenBusinessDay}
                 disabled={opening || healthLoading || !health}
-                className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-[#007aff] px-5 py-3 text-sm font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {opening
-                  ? "Opening Business Day..."
-                  : "Confirm & Open Business Day"}
+                {opening ? "Opening..." : "Confirm & Open"}
               </button>
             </div>
           </div>

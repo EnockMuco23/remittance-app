@@ -49,140 +49,184 @@ export default async function ManagementDashboardPage() {
       ? businessDays[0]
       : null;
 
-  const isOpen = businessDay?.status === "open";
-  const isClosing = businessDay?.status === "closing";
+  const status = businessDay?.status ?? "closed";
+  const isOpen = status === "open";
+  const isClosing = status === "closing";
+
+  const statusLabel = isOpen
+    ? "Open"
+    : isClosing
+      ? "Closing"
+      : "Closed";
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+      <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
+        <aside className="flex min-h-screen flex-col bg-white px-6 py-7">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Management Dashboard
-            </h1>
+            <p className="text-lg font-semibold tracking-[-0.02em]">
+              Shine Transfers
+            </p>
 
-            <p className="mt-2 text-gray-600">
-              Welcome, {profile.full_name}.
+            <p className="mt-1 text-sm text-[#86868b]">
+              Management
             </p>
           </div>
 
-          <LogoutButton />
-        </div>
+          <nav className="mt-8 space-y-1">
+            <Link
+              href="/management"
+              className="block rounded-xl bg-[#f5f5f7] px-4 py-3 text-sm font-medium text-[#1d1d1f]"
+            >
+              Overview
+            </Link>
 
-        {/* Business Day */}
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500">
-                Business Day
-              </p>
+            <Link
+              href="/management/paybots"
+              className="block rounded-xl px-4 py-3 text-sm text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            >
+              Paybots
+            </Link>
 
-              <div className="mt-2 flex items-center gap-3">
-                <span
-                  className={`h-3 w-3 rounded-full ${
-                    isOpen
-                      ? "bg-green-500"
-                      : isClosing
-                        ? "bg-yellow-500"
-                        : "bg-gray-400"
-                  }`}
-                />
+            <Link
+              href="/management/workforce"
+              className="block rounded-xl px-4 py-3 text-sm text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            >
+              Workforce
+            </Link>
 
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {isOpen ? "Open" : isClosing ? "Closing" : "Closed"}
-                </h2>
-              </div>
-
-              <p className="mt-1 text-sm text-gray-500">
-                {isOpen
-                  ? `Operational date: ${businessDay.business_date}`
-                  : isClosing
-                    ? `Closing date: ${businessDay.business_date}`
-                    : "No Business Day is currently active."}
-              </p>
-
-              {isClosing && (
-                <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
-                  <p className="text-sm font-medium text-yellow-900">
-                    Business Day is closing
-                  </p>
-
-                  <p className="mt-1 text-sm text-yellow-800">
-                    New transfers and new Paybot cash sessions are blocked.
-                    Existing operational work can continue until it is
-                    completed and reconciled. Exchange rates can still be
-                    entered during closing.
-                  </p>
-                </div>
-              )}
-            </div>
+            <Link
+              href="/management/transfers"
+              className="block rounded-xl px-4 py-3 text-sm text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            >
+              Transfers
+            </Link>
 
             <Link
               href="/management/business-day"
-              className="rounded-lg bg-black px-5 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
+              className="block rounded-xl px-4 py-3 text-sm text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
             >
-              Manage Business Day →
+              Business Day
             </Link>
+          </nav>
+
+          <div className="mt-auto pt-8">
+            <LogoutButton />
+          </div>
+        </aside>
+
+        <section className="min-w-0 px-5 py-8 sm:px-8 lg:px-10">
+          <div className="mx-auto max-w-[1180px]">
+            <header className="mb-8 flex flex-col gap-2">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em]">
+                Overview
+              </h1>
+
+              <p className="text-[#86868b]">
+                {profile.full_name}
+              </p>
+            </header>
+
+            <section className="mb-6 rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-[#86868b]">
+                    Business Day
+                  </p>
+
+                  <div className="mt-3 flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className={`h-2 w-2 rounded-full ${
+                        isOpen
+                          ? "bg-[#34c759]"
+                          : isClosing
+                            ? "bg-[#ffcc00]"
+                            : "bg-[#86868b]"
+                      }`}
+                    />
+
+                    <h2 className="text-xl font-semibold">
+                      {statusLabel}
+                    </h2>
+                  </div>
+
+                  <p className="mt-2 text-sm text-[#86868b]">
+                    {businessDay
+                      ? `${isClosing ? "Closing date" : "Operational date"}: ${businessDay.business_date}`
+                      : "No active business day"}
+                  </p>
+
+                  {isClosing && (
+                    <p className="mt-4 max-w-xl text-sm text-[#86868b]">
+                      New transfers and cash sessions are blocked.
+                    </p>
+                  )}
+                </div>
+
+                <Link
+                  href="/management/business-day"
+                  className="rounded-xl bg-[#007aff] px-5 py-3 text-center text-sm font-semibold text-white transition active:scale-[0.98]"
+                >
+                  Manage
+                </Link>
+              </div>
+            </section>
+
+            <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <Link
+                href="/management/paybots"
+                className="rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
+              >
+                <p className="text-sm text-[#86868b]">
+                  Pending Paybots
+                </p>
+
+                <p className="mt-3 text-4xl font-semibold tabular-nums tracking-[-0.03em]">
+                  {pendingPaybots ?? 0}
+                </p>
+
+                <p className="mt-5 text-sm font-medium text-[#007aff]">
+                  Paybot applications
+                </p>
+              </Link>
+
+              <Link
+                href="/management/workforce"
+                className="rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
+              >
+                <p className="text-sm text-[#86868b]">
+                  Workforce
+                </p>
+
+                <p className="mt-3 text-2xl font-semibold tracking-[-0.02em]">
+                  Agents &amp; Paybots
+                </p>
+
+                <p className="mt-5 text-sm font-medium text-[#007aff]">
+                  Manage
+                </p>
+              </Link>
+
+              <Link
+                href="/management/transfers"
+                className="rounded-[22px] bg-white p-7 shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
+              >
+                <p className="text-sm text-[#86868b]">
+                  Transfers
+                </p>
+
+                <p className="mt-3 text-2xl font-semibold tracking-[-0.02em]">
+                  Monitor
+                </p>
+
+                <p className="mt-5 text-sm font-medium text-[#007aff]">
+                  Open transfers
+                </p>
+              </Link>
+            </section>
           </div>
         </section>
-
-        {/* Management Modules */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* Paybot Applications */}
-          <Link
-            href="/management/paybots"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <p className="text-sm font-medium text-gray-500">
-              Pending Paybots
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              {pendingPaybots ?? 0}
-            </p>
-
-            <p className="mt-3 text-sm font-medium text-blue-600">
-              Manage Paybot applications →
-            </p>
-          </Link>
-
-          {/* Workforce */}
-          <Link
-            href="/management/workforce"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <p className="text-sm font-medium text-gray-500">
-              Workforce
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              Agents &amp; Paybots
-            </p>
-
-            <p className="mt-3 text-sm font-medium text-blue-600">
-              Manage workforce →
-            </p>
-          </Link>
-
-          {/* Transfers */}
-          <Link
-            href="/management/transfers"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <p className="text-sm font-medium text-gray-500">
-              Transfers
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              Transfers
-            </p>
-
-            <p className="mt-3 text-sm font-medium text-blue-600">
-              Monitor and manage transfers →
-            </p>
-          </Link>
-        </div>
       </div>
     </main>
   );

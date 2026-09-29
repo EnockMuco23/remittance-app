@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import LogoutButton from "../../dashboard/logout-button";
+
+type WorkforceMember = {
+  id: string;
+  full_name: string | null;
+  role: "agent" | "paybot" | string;
+  created_at: string;
+};
 
 export default async function WorkforcePage() {
   const supabase = await createClient();
@@ -14,331 +20,127 @@ export default async function WorkforcePage() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("full_name, role")
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "management") {
+  if (profileError || !profile || profile.role !== "management") {
     redirect("/dashboard");
   }
 
-  const today = new Date()
-    .toISOString()
-    .slice(0, 10);
+  const { data: workforce, error: workforceError } = await supabase
+    .from("profiles")
+    .select("id, full_name, role, created_at")
+    .in("role", ["agent", "paybot"])
+    .order("role", { ascending: true })
+    .order("full_name", { ascending: true });
 
-  const fromDate = new Date(
-    Date.now() - 30 * 24 * 60 * 60 * 1000
-  ).toISOString();
+  if (workforceError) {
+    throw new Error(workforceError.message);
+  }
 
-  const toDate = new Date().toISOString();
-
-  const [
-    agentsResult,
-    paybotsResult,
-  ] = await Promise.all([
-    supabase.rpc(
-      "get_management_agents_overview",
-      {
-        p_from: fromDate,
-        p_to: toDate,
-      }
-    ),
-
-    supabase.rpc(
-      "get_management_paybots_overview",
-      {
-        p_from: today,
-        p_to: today,
-      }
-    ),
-  ]);
-
-  const agents =
-    agentsResult.data ?? [];
-
-  const paybots =
-    paybotsResult.data ?? [];
+  const members = (workforce ?? []) as WorkforceMember[];
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
-      <div className="mx-auto max-w-7xl">
+    <main className="min-h-screen bg-[#f5f5f7] px-6 py-8 text-[#1d1d1f] md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8">
+          <Link
+            href="/management"
+            className="text-sm font-medium text-[#007aff] transition-opacity hover:opacity-70"
+          >
+            Management
+          </Link>
 
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
-          <div>
-            <Link
-              href="/management"
-              className="text-sm text-blue-600 hover:underline"
-            >
-              ← Back to Management
-            </Link>
-
-            <h1 className="mt-3 text-3xl font-bold">
+          <div className="mt-6">
+            <h1 className="text-3xl font-semibold tracking-tight">
               Workforce
             </h1>
-
-            <p className="mt-2 text-gray-600">
-              Management overview of Agents
-              and Paybots.
+            <p className="mt-2 text-[#86868b]">
+              Agents and paybots registered in the system.
             </p>
           </div>
-
-          <LogoutButton />
-
         </div>
 
-        {/* Agents */}
-        <section className="mt-8 rounded-xl bg-white p-6 shadow-sm">
+        <section className="overflow-hidden rounded-[24px] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+          {members.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <p className="text-base font-medium">No workforce members</p>
+              <p className="mt-2 text-sm text-[#86868b]">
+                No agents or paybots are currently registered.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="hidden md:block">
+                <div className="grid grid-cols-[1.5fr_1.8fr_1fr_1fr] gap-6 px-7 py-4 text-xs font-medium uppercase tracking-wide text-[#86868b]">
+                  <div>Name</div>
+                  <div>ID</div>
+                  <div>Role</div>
+                  <div>Created</div>
+                </div>
 
-          <div>
-            <h2 className="text-xl font-bold">
-              Agents
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Operational performance over
-              the last 30 days.
-            </p>
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-
-            <table className="w-full min-w-[850px] text-left text-sm">
-
-              <thead className="border-b text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="pb-3">
-                    Agent
-                  </th>
-
-                  <th className="pb-3">
-                    Clients
-                  </th>
-
-                  <th className="pb-3">
-                    Transfers
-                  </th>
-
-                  <th className="pb-3">
-                    Completed
-                  </th>
-
-                  <th className="pb-3">
-                    Pending
-                  </th>
-
-                  <th className="pb-3">
-                    Volume
-                  </th>
-
-                  <th className="pb-3">
-                    Completion
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {agents.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-gray-500"
+                <div className="divide-y divide-[#f5f5f7]">
+                  {members.map((member) => (
+                    <div
+                      key={member.id}
+                      className="grid grid-cols-[1.5fr_1.8fr_1fr_1fr] gap-6 px-7 py-5"
                     >
-                      No agents found.
-                    </td>
-                  </tr>
-                ) : (
-                  agents.map((agent) => (
-                    <tr
-                      key={agent.agent_id}
-                      className="border-b last:border-0"
-                    >
-                      <td className="py-4 font-medium">
-                        {agent.agent_name}
-                      </td>
+                      <div className="font-medium">
+                        {member.full_name || "Unnamed"}
+                      </div>
 
-                      <td>
-                        {agent.client_count}
-                      </td>
+                      <div className="truncate text-sm text-[#86868b]">
+                        {member.id}
+                      </div>
 
-                      <td>
-                        {agent.transfer_count}
-                      </td>
+                      <div className="text-sm capitalize">
+                        {member.role}
+                      </div>
 
-                      <td>
-                        {
-                          agent.completed_transfer_count
-                        }
-                      </td>
+                      <div className="text-sm text-[#86868b]">
+                        {new Intl.DateTimeFormat("en-US", {
+                          dateStyle: "medium",
+                        }).format(new Date(member.created_at))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-                      <td>
-                        {
-                          agent.pending_transfer_count
-                        }
-                      </td>
+              <div className="divide-y divide-[#f5f5f7] md:hidden">
+                {members.map((member) => (
+                  <div key={member.id} className="px-6 py-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {member.full_name || "Unnamed"}
+                        </p>
 
-                      <td>
-                        {Number(
-                          agent.total_volume ?? 0
-                        ).toLocaleString()}
-                      </td>
+                        <p className="mt-1 truncate text-xs text-[#86868b]">
+                          {member.id}
+                        </p>
+                      </div>
 
-                      <td>
-                        {Number(
-                          agent.completion_rate ?? 0
-                        ).toFixed(1)}
-                        %
-                      </td>
-                    </tr>
-                  ))
-                )}
+                      <span className="shrink-0 text-sm capitalize text-[#86868b]">
+                        {member.role}
+                      </span>
+                    </div>
 
-              </tbody>
-            </table>
-
-          </div>
+                    <p className="mt-4 text-sm text-[#86868b]">
+                      {new Intl.DateTimeFormat("en-US", {
+                        dateStyle: "medium",
+                      }).format(new Date(member.created_at))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
-
-        {/* Paybots */}
-        <section className="mt-6 rounded-xl bg-white p-6 shadow-sm">
-
-          <div>
-            <h2 className="text-xl font-bold">
-              Paybots
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Today&apos;s Paybot activity.
-            </p>
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-
-            <table className="w-full min-w-[850px] text-left text-sm">
-
-              <thead className="border-b text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="pb-3">
-                    Paybot
-                  </th>
-
-                  <th className="pb-3">
-                    Sessions
-                  </th>
-
-                  <th className="pb-3">
-                    Open
-                  </th>
-
-                  <th className="pb-3">
-                    Discrepancies
-                  </th>
-
-                  <th className="pb-3">
-                    Payout Volume
-                  </th>
-
-                  <th className="pb-3">
-                    Completed
-                  </th>
-
-                  <th className="pb-3">
-                    Avg. Delivery
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {paybots.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-gray-500"
-                    >
-                      No Paybot activity today.
-                    </td>
-                  </tr>
-                ) : (
-                  paybots.map((paybot) => (
-                    <tr
-                      key={paybot.paybot_id}
-                      className="border-b last:border-0"
-                    >
-                      <td className="py-4 font-medium">
-                        {paybot.paybot_name}
-                      </td>
-
-                      <td>
-                        {paybot.session_count}
-                      </td>
-
-                      <td>
-                        {paybot.open_session_count}
-                      </td>
-
-                      <td>
-                        {paybot.discrepancy_session_count}
-                      </td>
-
-                      <td>
-                        {Number(
-                          paybot.payout_volume ?? 0
-                        ).toLocaleString()}
-                      </td>
-
-                      <td>
-                        {
-                          paybot.completed_transfer_count
-                        }
-                      </td>
-
-                      <td>
-                        {formatSeconds(
-                          paybot.average_delivery_seconds
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-
-              </tbody>
-            </table>
-
-          </div>
-        </section>
-
       </div>
     </main>
   );
-}
-
-function formatSeconds(
-  seconds: number | null
-) {
-  if (!seconds) {
-    return "—";
-  }
-
-  const minutes = Math.round(
-    Number(seconds) / 60
-  );
-
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-
-  const hours = Math.floor(
-    minutes / 60
-  );
-
-  const remainingMinutes =
-    minutes % 60;
-
-  return remainingMinutes
-    ? `${hours}h ${remainingMinutes}m`
-    : `${hours}h`;
 }
