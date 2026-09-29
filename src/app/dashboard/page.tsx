@@ -20,6 +20,8 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  console.log("[DEBUG dashboard] user:", user ? user.id : null);
+  
   if (!user) {
     redirect("/login");
   }
@@ -30,6 +32,8 @@ export default async function DashboardPage() {
       .select("full_name, role")
       .eq("id", user.id)
       .single();
+  
+  console.log("[DEBUG dashboard] profile:", profile, "error:", profileError);
 
   if (profileError || !profile) {
     redirect("/login");
